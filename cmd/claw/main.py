@@ -3,7 +3,7 @@ import os
 
 from internal.engine import new_agent_engine
 from internal.provider import new_zhipu_openai_provider
-from internal.tools import ReadFileTool, new_registry
+from internal.tools import BashTool, ReadFileTool, WriteFileTool, new_registry
 
 
 # ==========================================
@@ -22,9 +22,11 @@ def main() -> int:
     # 初始化真实的 Provider 大脑。
     provider = new_zhipu_openai_provider("glm-4.5-air")
 
-    # 初始化真实的 Tool Registry，并挂载 ReadFile 工具。
+    # 初始化真实的 Tool Registry，并挂载极简工具集。
     registry = new_registry()
     registry.register(ReadFileTool(work_dir))
+    registry.register(WriteFileTool(work_dir))
+    registry.register(BashTool(work_dir))
     enable_thinking = False
 
     # 实例化核心引擎。
@@ -32,7 +34,14 @@ def main() -> int:
 
     # 发起任务指令。
     try:
-        engine.run("请调用工具读取一下当前工作区目录下 hello.txt 文件的内容，并用一句话向我总结它说了什么。")
+        engine.run(
+            """
+请帮我执行以下操作：
+1. 用 bash 查看一下我当前电脑的 Go 版本。
+2. 帮我写一个简单的 helloworld.go 文件，输出 "Hello, go-tiny-claw!"。
+3. 用 bash 编译并运行这个 go 文件，确认它能正常工作。
+"""
+        )
     except Exception as exc:
         logging.exception("引擎崩溃: %s", exc)
         return 1

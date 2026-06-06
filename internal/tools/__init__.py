@@ -1,3 +1,4 @@
+from .bash import BashTool, NewBashTool, new_bash_tool
 from .builtin import register_builtin_tools
 from .read_file import NewReadFileTool, ReadFileTool, new_read_file_tool
 from .registry import BaseTool, FunctionTool, NewRegistry, Registry, ToolRegistry, new_registry
@@ -5,11 +6,14 @@ from .write_file import NewWriteFileTool, WriteFileTool, new_write_file_tool
 
 __all__ = [
     "BaseTool",
+    "BashTool",
     "FunctionTool",
     "Registry",
     "ToolRegistry",
     "new_registry",
     "NewRegistry",
+    "new_bash_tool",
+    "NewBashTool",
     "ReadFileTool",
     "new_read_file_tool",
     "NewReadFileTool",

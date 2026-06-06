@@ -1,21 +1,9 @@
-import subprocess
 from pathlib import Path
 
+from .bash import BashTool
 from .read_file import ReadFileTool
 from .registry import ToolRegistry
 from .write_file import WriteFileTool
-
-
-def bash(command: str, cwd: str | None = None) -> str:
-    result = subprocess.run(
-        command,
-        cwd=cwd,
-        shell=True,
-        check=False,
-        text=True,
-        capture_output=True,
-    )
-    return result.stdout if result.returncode == 0 else result.stderr
 
 
 def edit(path: str, content: str) -> str:
@@ -26,22 +14,9 @@ def edit(path: str, content: str) -> str:
 
 
 def register_builtin_tools(registry: ToolRegistry, work_dir: str | None = None) -> None:
-    registry.register(
-        "bash",
-        bash,
-        description="Execute a shell command and return stdout or stderr.",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "command": {"type": "string", "description": "Shell command to run."},
-                "cwd": {
-                    "type": "string",
-                    "description": "Optional working directory.",
-                },
-            },
-            "required": ["command"],
-        },
-    )
+    if work_dir:
+        registry.register(BashTool(work_dir))
+
     registry.register(
         "edit",
         edit,
