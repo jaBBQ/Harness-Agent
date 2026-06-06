@@ -1,0 +1,13 @@
+[project]
+name = "harness-agent"
+version = "0.1.0"
+description = "Python harness agent scaffold."
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+claw = "cmd.claw.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cmd*", "internal*"]
