@@ -3,7 +3,10 @@ name = "harness-agent"
 version = "0.1.0"
 description = "Python harness agent scaffold."
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "anthropic",
+    "openai",
+]
 
 [project.scripts]
 claw = "cmd.claw.main:main"
