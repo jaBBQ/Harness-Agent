@@ -1,6 +1,7 @@
 import subprocess
 from pathlib import Path
 
+from .read_file import ReadFileTool
 from .registry import ToolRegistry
 
 
@@ -23,7 +24,7 @@ def edit(path: str, content: str) -> str:
     return str(target)
 
 
-def register_builtin_tools(registry: ToolRegistry) -> None:
+def register_builtin_tools(registry: ToolRegistry, work_dir: str | None = None) -> None:
     registry.register(
         "bash",
         bash,
@@ -53,3 +54,5 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             "required": ["path", "content"],
         },
     )
+    if work_dir:
+        registry.register(ReadFileTool(work_dir))
