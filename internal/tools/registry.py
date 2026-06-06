@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
 import json
+import logging
 from typing import Any
 
 from internal.schema import ToolCall, ToolDefinition, ToolResult
@@ -9,16 +10,66 @@ from internal.schema import ToolCall, ToolDefinition, ToolResult
 ToolHandler = Callable[..., Any]
 
 
-@dataclass(slots=True)
-class RegisteredTool:
-    """保存单个工具的执行函数与对外暴露的 Schema。"""
+class BaseTool(ABC):
+    """BaseTool 是所有具体工具必须实现的通用接口。"""
 
+    @abstractmethod
+    def name(self) -> str:
+        """返回工具的全局唯一名称。"""
+        raise NotImplementedError
+
+    @abstractmethod
+    def definition(self) -> ToolDefinition:
+        """返回提交给大模型的工具元信息和参数 JSON Schema。"""
+        raise NotImplementedError
+
+    @abstractmethod
+    def execute(self, arguments: Any) -> str:
+        """接收大模型吐出的参数并执行具体业务逻辑。"""
+        raise NotImplementedError
+
+
+@dataclass(slots=True)
+class FunctionTool(BaseTool):
+    """将普通 Python 函数适配成 BaseTool。"""
+
+    tool_name: str
     handler: ToolHandler
-    definition: ToolDefinition
+    tool_definition: ToolDefinition
+
+    def name(self) -> str:
+        return self.tool_name
+
+    def definition(self) -> ToolDefinition:
+        return self.tool_definition
+
+    def execute(self, arguments: Any) -> str:
+        output = self._execute_handler(arguments)
+        return str(output)
+
+    def _execute_handler(self, arguments: Any) -> Any:
+        if isinstance(arguments, str):
+            try:
+                arguments = json.loads(arguments)
+            except json.JSONDecodeError:
+                pass
+
+        if arguments is None:
+            return self.handler()
+        if isinstance(arguments, dict):
+            return self.handler(**arguments)
+        if isinstance(arguments, list):
+            return self.handler(*arguments)
+        return self.handler(arguments)
 
 
 class Registry(ABC):
     """Registry 定义了工具的注册与分发执行接口。"""
+
+    @abstractmethod
+    def register(self, tool: BaseTool) -> None:
+        """挂载一个新的工具到系统中。"""
+        raise NotImplementedError
 
     @abstractmethod
     def get_available_tools(self) -> list[ToolDefinition]:
@@ -35,71 +86,85 @@ class ToolRegistry(Registry):
     """工具注册表，负责保存工具定义并按 ToolCall 分发执行。"""
 
     def __init__(self) -> None:
-        self._tools: dict[str, RegisteredTool] = {}
+        self._tools: dict[str, BaseTool] = {}
 
     def register(
         self,
-        name: str,
-        handler: ToolHandler,
+        tool: BaseTool | str,
+        handler: ToolHandler | None = None,
         description: str = "",
         input_schema: dict[str, Any] | None = None,
     ) -> None:
-        """注册工具执行函数及其 JSON Schema 描述。"""
-        if name in self._tools:
-            raise ValueError(f"Tool already registered: {name}")
+        """注册 BaseTool，或兼容旧的函数式注册写法。"""
+        if isinstance(tool, BaseTool):
+            self._register_tool(tool)
+            return
+
+        if handler is None:
+            raise ValueError("handler is required when registering a function tool")
 
         definition = ToolDefinition(
-            name=name,
+            name=tool,
             description=description,
             input_schema=input_schema or {"type": "object", "properties": {}},
         )
-        self._tools[name] = RegisteredTool(handler=handler, definition=definition)
+        self._register_tool(
+            FunctionTool(
+                tool_name=tool,
+                handler=handler,
+                tool_definition=definition,
+            )
+        )
+
+    def register_tool(self, tool: BaseTool) -> None:
+        """注册实现 BaseTool 接口的工具对象。"""
+        self._register_tool(tool)
+
+    def _register_tool(self, tool: BaseTool) -> None:
+        name = tool.name()
+        if name in self._tools:
+            logging.warning("[Warning] 工具 '%s' 已经被注册，将被覆盖。", name)
+
+        self._tools[name] = tool
+        logging.info("[Registry] 成功挂载工具: %s", name)
 
     def call(self, name: str, *args: Any, **kwargs: Any) -> Any:
         """直接按名称调用工具，供本地代码使用。"""
         if name not in self._tools:
             raise KeyError(f"Tool not found: {name}")
-        return self._tools[name].handler(*args, **kwargs)
+        return self._tools[name].execute(kwargs or list(args) or None)
 
     def names(self) -> list[str]:
         return sorted(self._tools)
 
     def get_available_tools(self) -> list[ToolDefinition]:
-        return [self._tools[name].definition for name in self.names()]
+        return [self._tools[name].definition() for name in self.names()]
 
     def execute(self, call: ToolCall) -> ToolResult:
         if call.name not in self._tools:
             return ToolResult(
                 tool_call_id=call.id,
-                output=f"Tool not found: {call.name}",
+                output=f"Error: 系统中不存在名为 '{call.name}' 的工具。",
                 is_error=True,
             )
 
         try:
-            output = self._execute_handler(self._tools[call.name].handler, call.arguments)
+            output = self._tools[call.name].execute(call.arguments)
             return ToolResult(
                 tool_call_id=call.id,
-                output=str(output),
+                output=output,
                 is_error=False,
             )
         except Exception as exc:
             return ToolResult(
                 tool_call_id=call.id,
-                output=str(exc),
+                output=f"Error executing {call.name}: {exc}",
                 is_error=True,
             )
 
-    def _execute_handler(self, handler: ToolHandler, arguments: Any) -> Any:
-        if isinstance(arguments, str):
-            try:
-                arguments = json.loads(arguments)
-            except json.JSONDecodeError:
-                pass
 
-        if arguments is None:
-            return handler()
-        if isinstance(arguments, dict):
-            return handler(**arguments)
-        if isinstance(arguments, list):
-            return handler(*arguments)
-        return handler(arguments)
+def new_registry() -> Registry:
+    return ToolRegistry()
+
+
+NewRegistry = new_registry
