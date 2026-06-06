@@ -1,8 +1,10 @@
 .venv/
+.venv.*/
 .idea/
 __pycache__/
 *.py[cod]
 .harness/
+*.egg-info/
 python-*.exe
 .python*/
 install-python*.log

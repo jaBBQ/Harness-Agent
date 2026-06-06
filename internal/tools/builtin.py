@@ -3,6 +3,7 @@ from pathlib import Path
 
 from .read_file import ReadFileTool
 from .registry import ToolRegistry
+from .write_file import WriteFileTool
 
 
 def bash(command: str, cwd: str | None = None) -> str:
@@ -56,3 +57,4 @@ def register_builtin_tools(registry: ToolRegistry, work_dir: str | None = None) 
     )
     if work_dir:
         registry.register(ReadFileTool(work_dir))
+        registry.register(WriteFileTool(work_dir))
