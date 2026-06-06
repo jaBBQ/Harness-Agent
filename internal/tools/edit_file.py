@@ -67,13 +67,7 @@ class EditFileTool(BaseTool):
         except OSError as exc:
             raise OSError(f"读取文件失败: {exc}") from exc
 
-        match_count = content.count(old_text)
-        if match_count == 0:
-            raise ValueError("未找到 old_text，请提供文件中实际存在的原文片段")
-        if match_count > 1:
-            raise ValueError(f"old_text 匹配到 {match_count} 处，请提供更长上下文以确保唯一性")
-
-        updated = content.replace(old_text, new_text, 1)
+        updated = fuzzy_replace(content, old_text, new_text)
         try:
             full_path.write_text(updated, encoding="utf-8")
         except OSError as exc:
@@ -105,3 +99,74 @@ def new_edit_file_tool(work_dir: str) -> EditFileTool:
 
 
 NewEditFileTool = new_edit_file_tool
+
+
+def fuzzy_replace(original_content: str, old_text: str, new_text: str) -> str:
+    """四级容错降级替换算法。"""
+    # L1: 精确匹配
+    count = original_content.count(old_text)
+    if count == 1:
+        return original_content.replace(old_text, new_text, 1)
+    if count > 1:
+        raise ValueError(f"old_text 匹配到了 {count} 处，请提供更多的上下文代码以确保唯一性")
+
+    # L2: 换行符归一化
+    normalized_content = original_content.replace("\r\n", "\n")
+    normalized_old = old_text.replace("\r\n", "\n")
+
+    count = normalized_content.count(normalized_old)
+    if count == 1:
+        return normalized_content.replace(normalized_old, new_text, 1)
+    if count > 1:
+        raise ValueError(f"old_text 匹配到了 {count} 处，请提供更多的上下文代码以确保唯一性")
+
+    # L3: Trim Space 匹配
+    trimmed_old = normalized_old.strip()
+    if trimmed_old:
+        count = normalized_content.count(trimmed_old)
+        if count == 1:
+            return normalized_content.replace(trimmed_old, new_text, 1)
+        if count > 1:
+            raise ValueError(f"old_text 匹配到了 {count} 处，请提供更多的上下文代码以确保唯一性")
+
+    # L4: 逐行去缩进匹配
+    return line_by_line_replace(normalized_content, normalized_old, new_text)
+
+
+def line_by_line_replace(content: str, old_text: str, new_text: str) -> str:
+    """按行切割，去除首尾空白后进行滑动窗口匹配。"""
+    content_lines = content.split("\n")
+    old_lines = old_text.strip().split("\n")
+
+    if not old_lines or len(content_lines) < len(old_lines):
+        raise ValueError("找不到该代码片段")
+
+    old_lines = [line.strip() for line in old_lines]
+
+    match_count = 0
+    match_start_index = -1
+    match_end_index = -1
+
+    for index in range(0, len(content_lines) - len(old_lines) + 1):
+        is_match = True
+        for offset, old_line in enumerate(old_lines):
+            if content_lines[index + offset].strip() != old_line:
+                is_match = False
+                break
+
+        if is_match:
+            match_count += 1
+            match_start_index = index
+            match_end_index = index + len(old_lines)
+
+    if match_count == 0:
+        raise ValueError("在文件中未找到 old_text，请大模型先调用 read_file 仔细确认文件内容和缩进")
+    if match_count > 1:
+        raise ValueError(f"模糊匹配到了 {match_count} 处相似代码，请提供更多上下行代码以精确定位")
+
+    new_content_lines = [
+        *content_lines[:match_start_index],
+        new_text,
+        *content_lines[match_end_index:],
+    ]
+    return "\n".join(new_content_lines)
