@@ -10,7 +10,7 @@ class LLMProvider(ABC):
     def generate(
         self,
         messages: list[Message],
-        available_tools: list[ToolDefinition],
+        available_tools: list[ToolDefinition] | None,
     ) -> Message:
         """接收当前的上下文历史、可用工具列表，并发起一次大模型推理。"""
         raise NotImplementedError

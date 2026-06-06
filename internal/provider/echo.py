@@ -9,10 +9,10 @@ class EchoProvider(LLMProvider):
     def generate(
         self,
         messages: list[Message],
-        available_tools: list[ToolDefinition],
+        available_tools: list[ToolDefinition] | None,
     ) -> Message:
         content = "\n".join(message.content for message in messages)
-        tool_names = ", ".join(tool.name for tool in available_tools)
+        tool_names = ", ".join(tool.name for tool in available_tools or [])
         if tool_names:
             content = f"{content}\n\nAvailable tools: {tool_names}"
         return Message(role=Role.ASSISTANT, content=f"EchoProvider response:\n{content}")

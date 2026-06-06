@@ -10,16 +10,22 @@ from internal.schema import Message, Role, ToolCall, ToolDefinition, ToolResult
 # ==========================================
 class MockProvider:
     def __init__(self) -> None:
-        self.turn = 0
+        self.action_turn = 0
 
     # 模拟大模型的响应：第一轮请求执行 bash，第二轮输出最终结果。
     def generate(
         self,
         messages: list[Message],
-        available_tools: list[ToolDefinition],
+        available_tools: list[ToolDefinition] | None,
     ) -> Message:
-        self.turn += 1
-        if self.turn == 1:
+        if available_tools is None:
+            return Message(
+                role=Role.ASSISTANT,
+                content="我会先检查当前目录文件，再根据观察结果给出结论。",
+            )
+
+        self.action_turn += 1
+        if self.action_turn == 1:
             return Message(
                 role=Role.ASSISTANT,
                 content="让我来看看当前目录下有什么文件。",

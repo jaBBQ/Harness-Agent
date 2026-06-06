@@ -23,26 +23,18 @@ class AgentEngine:
     def run(self, user_prompt: str) -> None:
         """Run 启动 Agent 的生命周期。"""
         logging.info("[Engine] 引擎启动，锁定工作区: %s", self.work_dir)
-        if self.enable_thinking:
-            logging.info("[Engine] 慢思考模式已开启。")
+        logging.info("[Engine] 慢思考模式 (Thinking Phase): %s", self.enable_thinking)
 
         # 1. 初始化会话的 Context (上下文内存)。
         # 在真实的场景中，这里会由动态 Prompt 组装器加载 AGENTS.md。
         # 目前先硬编码。
-        system_prompt = (
-            "You are go-tiny-claw, an expert coding assistant. "
-            "You have full access to tools in the workspace."
-        )
-        if self.enable_thinking:
-            system_prompt += (
-                " Before taking action, break down the task carefully, "
-                "validate assumptions against available context, and verify results."
-            )
-
         context_history = [
             Message(
                 role=Role.SYSTEM,
-                content=system_prompt,
+                content=(
+                    "You are go-tiny-claw, an expert coding assistant. "
+                    "You have full access to tools in the workspace."
+                ),
             ),
             Message(role=Role.USER, content=user_prompt),
         ]
@@ -57,34 +49,42 @@ class AgentEngine:
             # 获取当前挂载的所有工具定义。
             available_tools = self.registry.get_available_tools()
 
-            # 向大模型发起推理请求，包含 Reasoning。
+            # Phase 1: 慢思考阶段 (Thinking) - 剥夺工具，强制规划。
             if self.enable_thinking:
-                logging.info("[Engine] 正在慢思考 (Reasoning)...")
-            else:
-                logging.info("[Engine] 正在思考 (Reasoning)...")
+                logging.info("[Engine][Phase 1] 剥夺工具访问权，强制进入慢思考与规划阶段...")
+                try:
+                    think_resp = self.provider.generate(context_history, None)
+                except Exception as exc:
+                    raise RuntimeError("Thinking 阶段生成失败") from exc
+
+                if think_resp.content:
+                    print(f" [内部思考 Trace]: {think_resp.content}")
+                    context_history.append(think_resp)
+
+            # Phase 2: 行动阶段 (Action) - 恢复工具，顺着规划执行。
+            logging.info("[Engine][Phase 2] 恢复工具挂载，等待模型采取行动...")
             try:
-                response_msg = self.provider.generate(context_history, available_tools)
+                action_resp = self.provider.generate(context_history, available_tools)
             except Exception as exc:
-                raise RuntimeError("模型生成失败") from exc
+                raise RuntimeError("Action 阶段生成失败") from exc
 
             # 将模型的响应完整追加到上下文历史中。
-            context_history.append(response_msg)
+            context_history.append(action_resp)
 
             # 如果模型回复了纯文本，打印出来。
-            # 这通常是它的思考过程，或是最终结果。
-            if response_msg.content:
-                print(f"模型: {response_msg.content}")
+            if action_resp.content:
+                print(f" [对外回复]: {action_resp.content}")
 
             # 3. 退出条件判断。
             # 如果模型没有请求任何工具调用，说明它认为任务已经完成，跳出循环。
-            if not response_msg.tool_calls:
-                logging.info("[Engine] 任务完成，退出循环。")
+            if not action_resp.tool_calls:
+                logging.info("[Engine] 模型未请求调用工具，任务宣告完成。")
                 break
 
             # 4. 执行行动 (Action) 与获取观察结果 (Observation)。
-            logging.info("[Engine] 模型请求调用 %d 个工具...", len(response_msg.tool_calls))
+            logging.info("[Engine] 模型请求调用 %d 个工具...", len(action_resp.tool_calls))
 
-            for tool_call in response_msg.tool_calls:
+            for tool_call in action_resp.tool_calls:
                 logging.info(
                     "  -> 执行工具: %s, 参数: %s",
                     tool_call.name,
