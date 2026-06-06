@@ -12,7 +12,7 @@ class MockProvider:
     def __init__(self) -> None:
         self.action_turn = 0
 
-    # 模拟大模型的响应：第一轮请求执行 bash，第二轮输出最终结果。
+    # 模拟大模型的响应：Thinking 阶段先规划，Action 阶段再调用工具。
     def generate(
         self,
         messages: list[Message],
@@ -21,14 +21,17 @@ class MockProvider:
         if available_tools is None:
             return Message(
                 role=Role.ASSISTANT,
-                content="我会先检查当前目录文件，再根据观察结果给出结论。",
+                content=(
+                    "【推理中】目标是检查文件。我不能直接盲猜，"
+                    "我需要先调用 bash 工具执行 ls 命令，看看当前目录下有什么，然后再做定夺。"
+                ),
             )
 
         self.action_turn += 1
         if self.action_turn == 1:
             return Message(
                 role=Role.ASSISTANT,
-                content="让我来看看当前目录下有什么文件。",
+                content="我要执行我刚才计划的步骤了。",
                 tool_calls=[
                     ToolCall(
                         id="call_123",
@@ -40,7 +43,7 @@ class MockProvider:
 
         return Message(
             role=Role.ASSISTANT,
-            content="我看到了文件列表，里面包含 main.go，任务完成！",
+            content="根据工具返回的结果，我看到了 main.go，任务圆满完成！",
         )
 
 
@@ -49,7 +52,20 @@ class MockProvider:
 # ==========================================
 class MockRegistry:
     def get_available_tools(self) -> list[ToolDefinition]:
-        return []
+        # 返回一个伪造工具定义，确保 Action 阶段能看到已挂载工具。
+        return [
+            ToolDefinition(
+                name="bash",
+                description="Execute a shell command in the workspace.",
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                    "required": ["command"],
+                },
+            )
+        ]
 
     def execute(self, call: ToolCall) -> ToolResult:
         # 直接返回一段伪造的终端输出。
