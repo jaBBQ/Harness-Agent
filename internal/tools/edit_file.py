@@ -65,13 +65,13 @@ class EditFileTool(BaseTool):
         try:
             content = full_path.read_text(encoding="utf-8")
         except OSError as exc:
-            raise OSError(f"读取文件失败: {exc}") from exc
+            raise OSError(f"读取文件失败，请确认路径是否正确: {exc}") from exc
 
         updated = fuzzy_replace(content, old_text, new_text)
         try:
             full_path.write_text(updated, encoding="utf-8")
         except OSError as exc:
-            raise OSError(f"写入文件失败: {exc}") from exc
+            raise OSError(f"写回文件失败: {exc}") from exc
 
         return f"成功修改文件: {relative_path}"
 
