@@ -28,7 +28,7 @@ def main() -> int:
     registry.register(WriteFileTool(work_dir))
     registry.register(BashTool(work_dir))
     registry.register(EditFileTool(work_dir))
-    enable_thinking = False
+    enable_thinking = True
 
     # 实例化核心引擎。
     engine = new_agent_engine(provider, registry, work_dir, enable_thinking)
@@ -37,12 +37,8 @@ def main() -> int:
     try:
         engine.run(
             """
-我当前目录下有一个 server.go 文件。
-请帮我把里面 "TODO: 增加鉴权逻辑" 下面的那个 if 语句，整个替换为：
-if user == nil {
-    fmt.Println("Forbidden!")
-    return
-}
+我当前目录下有 a.txt, b.txt, c.txt 三个文件。
+为了节省时间，请你同时一次性读取这三个文件，并将它们的内容综合起来，告诉我它们分别记录了什么领域的信息。
 """
         )
     except Exception as exc:

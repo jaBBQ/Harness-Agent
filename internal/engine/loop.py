@@ -1,8 +1,9 @@
 import logging
+from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass
 
 from internal.provider import LLMProvider
-from internal.schema import Message, Role
+from internal.schema import Message, Role, ToolCall
 from internal.tools import Registry
 
 
@@ -81,36 +82,50 @@ class AgentEngine:
                 logging.info("[Engine] 模型未请求调用工具，任务宣告完成。")
                 break
 
-            # 4. 执行行动 (Action) 与获取观察结果 (Observation)。
-            logging.info("[Engine] 模型请求调用 %d 个工具...", len(action_resp.tool_calls))
+            # 4. 并发执行行动 (Action) 与获取观察结果 (Observation)。
+            logging.info("[Engine] 模型请求并发调用 %d 个工具...", len(action_resp.tool_calls))
 
-            for tool_call in action_resp.tool_calls:
-                logging.info(
-                    "  -> 执行工具: %s, 参数: %s",
-                    tool_call.name,
-                    tool_call.arguments,
-                )
-
-                # 通过 Registry 路由并执行底层工具。
-                result = self.registry.execute(tool_call)
-
-                if result.is_error:
-                    logging.info("  -> 工具执行报错: %s", result.output)
-                else:
-                    logging.info("  -> 工具执行成功 (返回 %d 字节)", len(result.output))
-
-                # 将工具执行的观察结果 (Observation) 封装为 User Message
-                # 追加到上下文中。
-                # 注意：tool_call_id 必须携带，这是维系大模型推理链条的关键。
-                observation_msg = Message(
-                    role=Role.USER,
-                    content=result.output,
-                    tool_call_id=tool_call.id,
-                )
-                context_history.append(observation_msg)
+            observation_msgs = self._execute_tool_calls_parallel(action_resp.tool_calls)
+            logging.info("[Engine] 所有并发工具执行完毕，开始聚合观察结果 (Observation)...")
+            context_history.extend(observation_msgs)
 
             # 循环回到开头，模型将带着新加入的 Observation
             # 继续它的下一轮思考。
+
+    def _execute_tool_calls_parallel(self, tool_calls: list[ToolCall]) -> list[Message]:
+        observation_msgs: list[Message | None] = [None] * len(tool_calls)
+
+        with ThreadPoolExecutor(max_workers=len(tool_calls)) as executor:
+            futures = [
+                executor.submit(self._execute_one_tool_call, index, tool_call, observation_msgs)
+                for index, tool_call in enumerate(tool_calls)
+            ]
+            wait(futures)
+            for future in futures:
+                future.result()
+
+        return [msg for msg in observation_msgs if msg is not None]
+
+    def _execute_one_tool_call(
+        self,
+        index: int,
+        tool_call: ToolCall,
+        observation_msgs: list[Message | None],
+    ) -> None:
+        logging.info("  -> [Go-%d] 触发并行执行: %s", index, tool_call.name)
+
+        result = self.registry.execute(tool_call)
+
+        if result.is_error:
+            logging.info("  -> [Go-%d] 工具执行报错: %s", index, result.output)
+        else:
+            logging.info("  -> [Go-%d] 工具执行成功 (返回 %d 字节)", index, len(result.output))
+
+        observation_msgs[index] = Message(
+            role=Role.USER,
+            content=result.output,
+            tool_call_id=tool_call.id,
+        )
 
 
 def new_agent_engine(
