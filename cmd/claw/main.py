@@ -13,8 +13,9 @@ def build_engine() -> AgentEngine:
     if not os.getenv("ZHIPU_API_KEY"):
         raise RuntimeError("请先导出 ZHIPU_API_KEY 环境变量")
 
-    # 获取当前执行目录作为 WorkDir 物理边界。
-    work_dir = os.getcwd()
+    # 获取当前执行目录下的 workspace 作为 WorkDir 物理边界。
+    work_dir = os.path.join(os.getcwd(), "workspace")
+    os.makedirs(work_dir, exist_ok=True)
 
     # 初始化真实的 Provider 大脑。
     provider = new_zhipu_openai_provider("glm-4.5-air")
@@ -72,8 +73,8 @@ def main() -> int:
     prompt = " ".join(args.prompt).strip()
     if not prompt:
         prompt = """
-我当前目录下有 a.txt, b.txt, c.txt 三个文件。
-为了节省时间，请你同时一次性读取这三个文件，并将它们的内容综合起来，告诉我它们分别记录了什么领域的信息。
+我需要在当前目录下新建一个 ping.go，提供一个简单的 http ping 接口。
+写完之后，帮我把代码用 git 提交一下。
 """
 
     try:
