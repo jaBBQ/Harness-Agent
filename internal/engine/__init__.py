@@ -1,4 +1,4 @@
-from .loop import AgentEngine, new_agent_engine
+from .loop import AgentEngine, Reporter, new_agent_engine
 from .main_loop import MainLoop
 
-__all__ = ["AgentEngine", "MainLoop", "new_agent_engine"]
+__all__ = ["AgentEngine", "MainLoop", "Reporter", "new_agent_engine"]

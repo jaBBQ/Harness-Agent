@@ -5,6 +5,7 @@ description = "Python harness agent scaffold."
 requires-python = ">=3.11"
 dependencies = [
     "anthropic",
+    "lark-oapi",
     "openai",
 ]
 
