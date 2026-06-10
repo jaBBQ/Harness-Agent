@@ -3,7 +3,7 @@ import logging
 import os
 from http.server import ThreadingHTTPServer
 
-from internal.engine import AgentEngine, new_agent_engine
+from internal.engine import AgentEngine, new_agent_engine, new_terminal_reporter
 from internal.feishu.bot import FeishuBot, make_feishu_event_handler
 from internal.provider import new_zhipu_openai_provider
 from internal.tools import BashTool, EditFileTool, ReadFileTool, WriteFileTool, new_registry
@@ -77,7 +77,7 @@ def main() -> int:
 """
 
     try:
-        engine.run(prompt)
+        engine.run(prompt, reporter=new_terminal_reporter())
     except Exception as exc:
         logging.exception("引擎崩溃: %s", exc)
         return 1

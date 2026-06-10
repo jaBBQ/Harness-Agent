@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from typing import Protocol
 
+from internal.context import PromptComposer
 from internal.provider import LLMProvider
 from internal.schema import Message, Role, ToolCall
 from internal.tools import Registry
@@ -43,23 +44,18 @@ class AgentEngine:
 
     # EnableThinking (慢思考模式): 开启后引导模型进行更谨慎的推理与验证。
     enable_thinking: bool = False
+    composer: PromptComposer | None = None
 
     def run(self, user_prompt: str, reporter: Reporter | None = None, ctx: object | None = None) -> None:
         """Run 启动 Agent 的生命周期。"""
         logging.info("[Engine] 引擎启动，锁定工作区: %s", self.work_dir)
         logging.info("[Engine] 慢思考模式 (Thinking Phase): %s", self.enable_thinking)
 
-        # 1. 初始化会话的 Context (上下文内存)。
-        # 在真实的场景中，这里会由动态 Prompt 组装器加载 AGENTS.md。
-        # 目前先硬编码。
+        composer = self.composer or PromptComposer(self.work_dir)
+
+        # 1. 初始化会话的 Context (上下文内存)，动态注入 AGENTS.md 与 Skills。
         context_history = [
-            Message(
-                role=Role.SYSTEM,
-                content=(
-                    "You are go-tiny-claw, an expert coding assistant. "
-                    "You have full access to tools in the workspace."
-                ),
-            ),
+            composer.build(),
             Message(role=Role.USER, content=user_prompt),
         ]
 
@@ -203,4 +199,5 @@ def new_agent_engine(
         registry=registry,
         work_dir=work_dir,
         enable_thinking=enable_thinking,
+        composer=PromptComposer(work_dir),
     )
